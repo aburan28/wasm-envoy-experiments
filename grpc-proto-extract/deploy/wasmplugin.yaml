@@ -1,0 +1,19 @@
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: grpc-proto-extract
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: my-grpc-service
+  url: oci://your-registry/grpc-proto-extract:latest
+  # For local testing, use a file path instead:
+  # url: file:///etc/istio/proxy/grpc_proto_extract.wasm
+  phase: STATS  # Run after auth but capture traffic
+  pluginConfig:
+    capture_request: true
+    capture_response: true
+    services: []     # empty = capture all services
+    methods: []      # empty = capture all methods
+    max_payload_bytes: 0  # 0 = unlimited
