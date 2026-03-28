@@ -8,11 +8,14 @@ on:
 
 jobs:
   lint:
-    name: Lint & Format
+    name: Lint & Format (${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        plugin: [grpc-proto-extract, response-capture]
     defaults:
       run:
-        working-directory: grpc-proto-extract
+        working-directory: ${{ matrix.plugin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -21,31 +24,37 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: grpc-proto-extract
+          workspaces: ${{ matrix.plugin }}
       - run: cargo fmt --check
       - run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
 
   test:
-    name: Test
+    name: Test (${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        plugin: [grpc-proto-extract, response-capture]
     defaults:
       run:
-        working-directory: grpc-proto-extract
+        working-directory: ${{ matrix.plugin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: grpc-proto-extract
+          workspaces: ${{ matrix.plugin }}
       - run: cargo test
 
   build:
-    name: Build WASM
+    name: Build WASM (${{ matrix.plugin }})
     runs-on: ubuntu-latest
     needs: [lint, test]
+    strategy:
+      matrix:
+        plugin: [grpc-proto-extract, response-capture]
     defaults:
       run:
-        working-directory: grpc-proto-extract
+        working-directory: ${{ matrix.plugin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -53,11 +62,43 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: grpc-proto-extract
+          workspaces: ${{ matrix.plugin }}
       - run: cargo build --target wasm32-unknown-unknown --release
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: grpc-proto-extract-wasm
-          path: grpc-proto-extract/target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm
+          name: ${{ matrix.plugin }}-wasm
+          path: ${{ matrix.plugin }}/target/wasm32-unknown-unknown/release/*.wasm
           retention-days: 30
+
+  tag:
+    name: Tag Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get next version
+        id: version
+        run: |
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            echo "tag=v0.1.0" >> "$GITHUB_OUTPUT"
+          else
+            # Increment patch version
+            major=$(echo "$latest" | sed 's/^v//' | cut -d. -f1)
+            minor=$(echo "$latest" | sed 's/^v//' | cut -d. -f2)
+            patch=$(echo "$latest" | sed 's/^v//' | cut -d. -f3)
+            patch=$((patch + 1))
+            echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"

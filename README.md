@@ -13,7 +13,6 @@ An Envoy HTTP filter that intercepts gRPC traffic, extracts protobuf payloads, a
 - Configurable capture of request and/or response bodies
 - Filter by gRPC service and method names
 - Configurable payload size limits
-- Runs as an Istio `WasmPlugin` or standalone Envoy WASM filter
 
 **Configuration:**
 
@@ -25,6 +24,29 @@ An Envoy HTTP filter that intercepts gRPC traffic, extracts protobuf payloads, a
 | `methods` | string[] | `[]` | gRPC methods to capture (empty = all) |
 | `max_payload_bytes` | int | `0` | Max payload bytes to decode (0 = unlimited) |
 
+### response-capture
+
+An Envoy HTTP filter that captures HTTP response metadata and bodies, logging them in JSON or plain text format. Useful for auditing, debugging, and response inspection across any HTTP service.
+
+**Features:**
+- Capture response headers and bodies
+- Filter by HTTP status code and path prefix
+- Configurable body size limits
+- JSON or plain text output format
+- Adds a tag header (`x-response-captured`) to captured responses
+
+**Configuration:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `capture_headers` | bool | `true` | Log response headers |
+| `capture_body` | bool | `true` | Log response body |
+| `status_codes` | int[] | `[]` | HTTP status codes to capture (empty = all) |
+| `path_prefixes` | string[] | `[]` | Path prefixes to capture (empty = all) |
+| `max_body_bytes` | int | `0` | Max body bytes to capture (0 = unlimited) |
+| `output_format` | string | `"json"` | Log format: `"json"` or `"plain"` |
+| `capture_tag_header` | string | `"x-response-captured"` | Header added to captured responses |
+
 ## Building
 
 **Prerequisites:** Rust toolchain with the `wasm32-unknown-unknown` target.
@@ -33,14 +55,12 @@ An Envoy HTTP filter that intercepts gRPC traffic, extracts protobuf payloads, a
 rustup target add wasm32-unknown-unknown
 ```
 
-**Build:**
+**Build a plugin:**
 
 ```sh
-cd grpc-proto-extract
+cd grpc-proto-extract   # or response-capture
 make build
 ```
-
-The compiled plugin is output to `target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm`.
 
 **Other targets:**
 
@@ -55,24 +75,26 @@ make clean   # Clean build artifacts
 
 ### Istio WasmPlugin
 
-A sample manifest is provided in [`grpc-proto-extract/deploy/wasmplugin.yaml`](grpc-proto-extract/deploy/wasmplugin.yaml). Update the `url` field to point to your OCI registry:
+Sample manifests are provided in each plugin's `deploy/` directory. Update the `url` field to point to your OCI registry:
 
 ```yaml
 url: oci://ghcr.io/aburan28/wasm-envoy-experiments/grpc-proto-extract:latest
+url: oci://ghcr.io/aburan28/wasm-envoy-experiments/response-capture:latest
 ```
 
 Then apply:
 
 ```sh
 kubectl apply -f grpc-proto-extract/deploy/wasmplugin.yaml
+kubectl apply -f response-capture/deploy/wasmplugin.yaml
 ```
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`) — Runs lint, test, and build on every push/PR to `main`. Uploads the `.wasm` binary as a GitHub Actions artifact.
-- **Release** (`.github/workflows/release.yml`) — On version tags (`v*`), builds the plugin, pushes to GHCR as an OCI artifact, and creates a GitHub Release with the `.wasm` binary attached.
+- **CI** (`.github/workflows/ci.yml`) — Runs lint, test, and build for all plugins on every push/PR to `main`. Uploads `.wasm` binaries as GitHub Actions artifacts. On merge to `main`, automatically creates and pushes a version tag.
+- **Release** (`.github/workflows/release.yml`) — On version tags (`v*`), builds all plugins, pushes to GHCR as OCI artifacts, and creates a GitHub Release with `.wasm` binaries attached.
 
-To create a release:
+Tags are auto-incremented (patch version) on every push to `main`. To manually release:
 
 ```sh
 git tag v0.1.0

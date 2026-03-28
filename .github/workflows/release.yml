@@ -11,11 +11,18 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build & Release
+    name: Build & Release (${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - plugin: grpc-proto-extract
+            wasm_name: grpc_proto_extract.wasm
+          - plugin: response-capture
+            wasm_name: response_capture.wasm
     defaults:
       run:
-        working-directory: grpc-proto-extract
+        working-directory: ${{ matrix.plugin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -23,30 +30,33 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: grpc-proto-extract
+          workspaces: ${{ matrix.plugin }}
       - run: cargo build --target wasm32-unknown-unknown --release
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: grpc-proto-extract-${{ github.ref_name }}
-          path: grpc-proto-extract/target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm
+          name: ${{ matrix.plugin }}-${{ github.ref_name }}
+          path: ${{ matrix.plugin }}/target/wasm32-unknown-unknown/release/${{ matrix.wasm_name }}
 
       - name: Push to GHCR (OCI)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
             oras login ghcr.io -u ${{ github.actor }} --password-stdin
 
-          oras push ghcr.io/${{ github.repository }}/grpc-proto-extract:${{ github.ref_name }} \
+          oras push ghcr.io/${{ github.repository }}/${{ matrix.plugin }}:${{ github.ref_name }} \
             --artifact-type application/vnd.module.wasm.content.layer.v1+wasm \
-            target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm:application/wasm
+            target/wasm32-unknown-unknown/release/${{ matrix.wasm_name }}:application/wasm
 
-          oras push ghcr.io/${{ github.repository }}/grpc-proto-extract:latest \
+          oras push ghcr.io/${{ github.repository }}/${{ matrix.plugin }}:latest \
             --artifact-type application/vnd.module.wasm.content.layer.v1+wasm \
-            target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm:application/wasm
+            target/wasm32-unknown-unknown/release/${{ matrix.wasm_name }}:application/wasm
+
+      - name: Rename for release asset
+        run: cp target/wasm32-unknown-unknown/release/${{ matrix.wasm_name }} /tmp/${{ matrix.plugin }}.wasm
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: grpc-proto-extract/target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm
+          files: /tmp/${{ matrix.plugin }}.wasm
           generate_release_notes: true

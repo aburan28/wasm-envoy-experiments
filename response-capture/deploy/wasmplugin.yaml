@@ -1,0 +1,18 @@
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: response-capture
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: my-service
+  url: oci://ghcr.io/aburan28/wasm-envoy-experiments/response-capture:latest
+  phase: STATS
+  pluginConfig:
+    capture_headers: true
+    capture_body: true
+    status_codes: []        # empty = capture all status codes
+    path_prefixes: []       # empty = capture all paths
+    max_body_bytes: 0       # 0 = unlimited
+    output_format: "json"   # "json" or "plain"
