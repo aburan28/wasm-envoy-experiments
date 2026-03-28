@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: grpc-proto-extract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: grpc-proto-extract
+      - run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: grpc-proto-extract-${{ github.ref_name }}
+          path: grpc-proto-extract/target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm
+
+      - name: Push to GHCR (OCI)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            oras login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          oras push ghcr.io/${{ github.repository }}/grpc-proto-extract:${{ github.ref_name }} \
+            --artifact-type application/vnd.module.wasm.content.layer.v1+wasm \
+            target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm:application/wasm
+
+          oras push ghcr.io/${{ github.repository }}/grpc-proto-extract:latest \
+            --artifact-type application/vnd.module.wasm.content.layer.v1+wasm \
+            target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm:application/wasm
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: grpc-proto-extract/target/wasm32-unknown-unknown/release/grpc_proto_extract.wasm
+          generate_release_notes: true
