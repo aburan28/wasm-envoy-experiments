@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ext-proc-config
+  namespace: default
+data:
+  config.yaml: |
+    listen_addr: "0.0.0.0:50051"
+    rules:
+      - name: "add-trace-id"
+        match_criteria:
+          services: ["*"]
+          methods: ["*"]
+          direction: "request"
+        action: "mutate_fields"
+        mutations:
+          - operation: "add"
+            field_number: 100
+            field_type: "length_delimited"
+            value_source: "uuid"
+        priority: 10
+        enabled: true
+
+      - name: "add-timestamp"
+        match_criteria:
+          services: ["*"]
+          methods: ["*"]
+          direction: "request"
+        action: "mutate_fields"
+        mutations:
+          - operation: "add"
+            field_number: 101
+            field_type: "varint"
+            value_source: "timestamp"
+        priority: 5
+        enabled: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-proc-service
+  namespace: default
+  labels:
+    app: ext-proc-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ext-proc-service
+  template:
+    metadata:
+      labels:
+        app: ext-proc-service
+    spec:
+      containers:
+        - name: ext-proc-service
+          image: ghcr.io/aburan28/wasm-envoy-experiments/ext-proc-service:latest
+          ports:
+            - containerPort: 50051
+              name: grpc
+              protocol: TCP
+          args:
+            - "--config"
+            - "/etc/ext-proc/config.yaml"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ext-proc
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: ext-proc-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-proc-service
+  namespace: default
+  labels:
+    app: ext-proc-service
+spec:
+  selector:
+    app: ext-proc-service
+  ports:
+    - port: 50051
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
