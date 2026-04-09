@@ -20,6 +20,8 @@ jobs:
             wasm_name: grpc_proto_extract.wasm
           - plugin: response-capture
             wasm_name: response_capture.wasm
+          - plugin: wasm-proto-filter
+            wasm_name: wasm_proto_filter.wasm
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}

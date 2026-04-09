@@ -1,0 +1,71 @@
+listen_addr: "0.0.0.0:50051"
+
+rules:
+  # Inject a UUID trace ID into every gRPC request at field 100
+  - name: "add-trace-id"
+    match_criteria:
+      services: ["*"]
+      methods: ["*"]
+      direction: "request"
+    action: "mutate_fields"
+    mutations:
+      - operation: "add"
+        field_number: 100
+        field_type: "length_delimited"
+        value_source: "uuid"
+    priority: 10
+    enabled: true
+
+  # Inject a Unix timestamp into every gRPC request at field 101
+  - name: "add-timestamp"
+    match_criteria:
+      services: ["*"]
+      methods: ["*"]
+      direction: "request"
+    action: "mutate_fields"
+    mutations:
+      - operation: "add"
+        field_number: 101
+        field_type: "varint"
+        value_source: "timestamp"
+    priority: 5
+    enabled: true
+
+  # Redact field 3 in GetUser responses (e.g., email)
+  - name: "redact-user-email"
+    match_criteria:
+      services: ["mypackage.UserService"]
+      methods: ["GetUser"]
+      direction: "response"
+    action: "mutate_fields"
+    mutations:
+      - operation: "set"
+        field_number: 3
+        field_type: "length_delimited"
+        value: "[REDACTED]"
+    priority: 20
+    enabled: true
+
+  # Remove debug metadata (field 99) from all responses
+  - name: "strip-debug-field"
+    match_criteria:
+      services: ["*"]
+      methods: ["*"]
+      direction: "response"
+    action: "mutate_fields"
+    mutations:
+      - operation: "remove"
+        field_number: 99
+    priority: 1
+    enabled: true
+
+  # Reject requests to AdminService from this filter
+  # (Use with field conditions for more granular control)
+  - name: "block-admin-calls"
+    match_criteria:
+      services: ["mypackage.AdminService"]
+      methods: ["*"]
+      direction: "request"
+    action: "reject"
+    priority: 100
+    enabled: false

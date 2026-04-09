@@ -1,0 +1,27 @@
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: wasm-proto-filter
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: my-grpc-service
+  url: oci://ghcr.io/aburan28/wasm-envoy-experiments/wasm-proto-filter:latest
+  # For local testing:
+  # url: file:///etc/istio/proxy/wasm_proto_filter.wasm
+  phase: AUTHN  # Run early so mutations apply before further processing
+  pluginConfig:
+    # Envoy cluster name pointing to the ext-proc-service.
+    # In Istio, this is auto-created from the K8s Service:
+    #   outbound|50051||ext-proc-service.default.svc.cluster.local
+    ext_proc_cluster: "outbound|50051||ext-proc-service.default.svc.cluster.local"
+    ext_proc_service: "proto_mutation.v1.ProtoMutationService"
+    ext_proc_method: "ProcessMessage"
+    ext_proc_timeout_ms: 200
+    process_request: true
+    process_response: true
+    services: []       # empty = process all gRPC services
+    methods: []        # empty = process all methods
+    max_payload_bytes: 0  # 0 = unlimited
+    fail_open: true    # continue on ext_proc failure

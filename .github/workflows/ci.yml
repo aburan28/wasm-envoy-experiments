@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        plugin: [grpc-proto-extract, response-capture]
+        plugin: [grpc-proto-extract, response-capture, wasm-proto-filter]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        plugin: [grpc-proto-extract, response-capture]
+        plugin: [grpc-proto-extract, response-capture, wasm-proto-filter]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -51,7 +51,7 @@ jobs:
     needs: [lint, test]
     strategy:
       matrix:
-        plugin: [grpc-proto-extract, response-capture]
+        plugin: [grpc-proto-extract, response-capture, wasm-proto-filter]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -71,10 +71,68 @@ jobs:
           path: ${{ matrix.plugin }}/target/wasm32-unknown-unknown/release/*.wasm
           retention-days: 30
 
+  lint-ext-proc:
+    name: Lint & Format (ext-proc-service)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ext-proc-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ext-proc-service
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+
+  test-ext-proc:
+    name: Test (ext-proc-service)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ext-proc-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ext-proc-service
+      - run: cargo test
+
+  build-ext-proc:
+    name: Build (ext-proc-service)
+    runs-on: ubuntu-latest
+    needs: [lint-ext-proc, test-ext-proc]
+    defaults:
+      run:
+        working-directory: ext-proc-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ext-proc-service
+      - run: cargo build --release
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ext-proc-service-binary
+          path: ext-proc-service/target/release/ext-proc-service
+          retention-days: 30
+
   tag:
     name: Tag Release
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [build, build-ext-proc]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: write

@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package proto_mutation.v1;
+
+// The main processing service called by the Wasm filter.
+// Receives decoded proto payloads and returns mutation instructions.
+service ProtoMutationService {
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse);
+}
+
+// Admin service for managing mutation rules at runtime.
+service MutationAdminService {
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  rpc AddRule(AddRuleRequest) returns (AddRuleResponse);
+  rpc RemoveRule(RemoveRuleRequest) returns (RemoveRuleResponse);
+  rpc UpdateRule(UpdateRuleRequest) returns (UpdateRuleResponse);
+}
+
+// ---- Enums ----
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_REQUEST = 1;
+  DIRECTION_RESPONSE = 2;
+}
+
+// Maps to protobuf wire types.
+enum FieldType {
+  FIELD_TYPE_VARINT = 0;
+  FIELD_TYPE_FIXED64 = 1;
+  FIELD_TYPE_LENGTH_DELIMITED = 2;
+  // Wire types 3 and 4 (start/end group) are deprecated.
+  FIELD_TYPE_FIXED32 = 5;
+}
+
+enum ResponseAction {
+  RESPONSE_ACTION_CONTINUE = 0;
+  RESPONSE_ACTION_MUTATE_FIELDS = 1;
+  RESPONSE_ACTION_REPLACE_BODY = 2;
+  RESPONSE_ACTION_REJECT = 3;
+}
+
+enum MutationOp {
+  MUTATION_OP_SET = 0;    // Set/overwrite a field (or add if missing)
+  MUTATION_OP_ADD = 1;    // Append a new field occurrence
+  MUTATION_OP_REMOVE = 2; // Remove all occurrences of a field
+}
+
+enum ConditionOp {
+  CONDITION_OP_EXISTS = 0;
+  CONDITION_OP_NOT_EXISTS = 1;
+  CONDITION_OP_EQUALS = 2;
+  CONDITION_OP_NOT_EQUALS = 3;
+  CONDITION_OP_CONTAINS = 4;
+}
+
+// ---- Processing messages ----
+
+message ProcessMessageRequest {
+  // The gRPC service being called, e.g. "mypackage.MyService"
+  string service_name = 1;
+  // The gRPC method being called, e.g. "GetUser"
+  string method_name = 2;
+  // Whether this is a request or response body
+  Direction direction = 3;
+  // The raw protobuf body (without gRPC framing)
+  bytes raw_body = 4;
+  // Schema-less decoded fields from the raw body
+  repeated ProtoField decoded_fields = 5;
+}
+
+message ProtoField {
+  uint32 field_number = 1;
+  FieldType field_type = 2;
+  bytes raw_value = 3;
+  // Human-readable display value (best-effort)
+  string display_value = 4;
+}
+
+message ProcessMessageResponse {
+  ResponseAction action = 1;
+  // Mutations to apply (when action = MUTATE_FIELDS)
+  repeated FieldMutation mutations = 2;
+  // Replacement body (when action = REPLACE_BODY)
+  bytes replaced_body = 3;
+  // Headers to add to the request/response
+  map<string, string> headers_to_add = 4;
+}
+
+message FieldMutation {
+  MutationOp operation = 1;
+  // Target field number in the protobuf message
+  uint32 field_number = 2;
+  // Wire type of the value
+  FieldType field_type = 3;
+  // New value bytes (for SET and ADD operations)
+  bytes value = 4;
+}
+
+// ---- Rule management messages ----
+
+message MutationRule {
+  string id = 1;
+  string name = 2;
+  RuleMatch match_criteria = 3;
+  // Action to take when the rule matches
+  ResponseAction action = 4;
+  // Mutations to apply (when action = MUTATE_FIELDS)
+  repeated FieldMutation mutations = 5;
+  // Replacement body (when action = REPLACE_BODY)
+  bytes replace_body = 6;
+  // Higher priority rules are evaluated first
+  int32 priority = 7;
+  bool enabled = 8;
+}
+
+message RuleMatch {
+  // gRPC service patterns to match (empty or ["*"] = all)
+  repeated string services = 1;
+  // gRPC method patterns to match (empty or ["*"] = all)
+  repeated string methods = 2;
+  // Direction to match (UNSPECIFIED = both)
+  Direction direction = 3;
+  // Optional field-level conditions
+  repeated FieldCondition field_conditions = 4;
+}
+
+message FieldCondition {
+  uint32 field_number = 1;
+  ConditionOp operator = 2;
+  bytes value = 3;
+}
+
+message ListRulesRequest {}
+
+message ListRulesResponse {
+  repeated MutationRule rules = 1;
+}
+
+message AddRuleRequest {
+  MutationRule rule = 1;
+}
+
+message AddRuleResponse {
+  string rule_id = 1;
+}
+
+message RemoveRuleRequest {
+  string rule_id = 1;
+}
+
+message RemoveRuleResponse {
+  bool found = 1;
+}
+
+message UpdateRuleRequest {
+  MutationRule rule = 1;
+}
+
+message UpdateRuleResponse {
+  bool found = 1;
+}
