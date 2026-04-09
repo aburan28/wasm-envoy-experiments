@@ -25,10 +25,10 @@ impl GrpcExtractHttp {
     }
 
     fn should_capture(&self, service: &str, method: &str) -> bool {
-        let service_match = self.config.services.is_empty()
-            || self.config.services.iter().any(|s| s == service);
-        let method_match = self.config.methods.is_empty()
-            || self.config.methods.iter().any(|m| m == method);
+        let service_match =
+            self.config.services.is_empty() || self.config.services.iter().any(|s| s == service);
+        let method_match =
+            self.config.methods.is_empty() || self.config.methods.iter().any(|m| m == method);
         service_match && method_match
     }
 
@@ -48,7 +48,9 @@ impl Context for GrpcExtractHttp {}
 
 impl HttpContext for GrpcExtractHttp {
     fn on_http_request_headers(&mut self, _num_headers: usize, _end_of_stream: bool) -> Action {
-        let content_type = self.get_http_request_header("content-type").unwrap_or_default();
+        let content_type = self
+            .get_http_request_header("content-type")
+            .unwrap_or_default();
         if !content_type.starts_with("application/grpc") {
             return Action::Continue;
         }

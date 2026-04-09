@@ -38,7 +38,12 @@ impl fmt::Debug for RawValue {
                 if !nested.is_empty() && nested_looks_valid(bytes, &nested) {
                     return write!(f, "message({:?})", nested);
                 }
-                write!(f, "bytes({} bytes: {:02x?})", bytes.len(), &bytes[..bytes.len().min(32)])
+                write!(
+                    f,
+                    "bytes({} bytes: {:02x?})",
+                    bytes.len(),
+                    &bytes[..bytes.len().min(32)]
+                )
             }
         }
     }
@@ -50,7 +55,9 @@ fn nested_looks_valid(_original: &[u8], fields: &[RawField]) -> bool {
         return false;
     }
     // Field numbers should be reasonable (< 10000) and the decode should cover a good portion
-    fields.iter().all(|f| f.field_number > 0 && f.field_number < 10000)
+    fields
+        .iter()
+        .all(|f| f.field_number > 0 && f.field_number < 10000)
 }
 
 /// Read a varint from the buffer, returning (value, bytes_consumed).

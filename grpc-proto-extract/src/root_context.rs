@@ -34,7 +34,10 @@ impl RootContext for GrpcExtractRoot {
     }
 
     fn create_http_context(&self, context_id: u32) -> Option<Box<dyn HttpContext>> {
-        Some(Box::new(GrpcExtractHttp::new(context_id, self.config.clone())))
+        Some(Box::new(GrpcExtractHttp::new(
+            context_id,
+            self.config.clone(),
+        )))
     }
 
     fn get_type(&self) -> Option<ContextType> {
